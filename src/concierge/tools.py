@@ -26,10 +26,16 @@ from concierge.retrieval import retrieve
 
 @tool
 def search_banking_docs(query: str, k: int = 4) -> str:
-    """Search Meridian National banking documentation.
+    """Search Meridian National banking documentation for fees, limits, policies, product details, etc.
+
+    Call this AT MOST ONCE per distinct concept per user turn. For a multi-part
+    question, prefer a single broad query that captures all the concepts (the
+    underlying retriever already handles broad queries well) rather than firing
+    one narrow query per sub-topic. Do not re-run an identical or near-identical
+    query within the same conversation — read the prior tool result instead.
 
     Args:
-        query: A natural-language search query.
+        query: A natural-language search query covering the full sub-question.
         k: Number of relevant chunks to return. Defaults to 4.
     """
     chunks = retrieve(query, k=k)
