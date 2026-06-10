@@ -44,11 +44,17 @@ def search_banking_docs(query: str, k: int = 4) -> str:
 
 @tool
 def account_lookup(customer_id: str) -> dict:
-    """Look up account information.
+    """Look up account information by Meridian National customer ID.
+
+    `customer_id` MUST be in the form `CUST-####` (literal prefix `CUST-`
+    followed by a 4-digit number). Do NOT pass an SSN, phone number, email
+    address, card number, or raw digits — the tool will reject them. If the
+    rep gave you any identifier other than a CUST-#### ID, ask them for the
+    customer ID before calling this tool; do not guess or transform other
+    identifiers into a CUST-#### value.
 
     Returns the customer's name and a list of their account IDs, account
-    types, and balances. Use this when the user wants details about an
-    account.
+    types, and balances.
     """
     if customer_id.startswith("X"):
         raise RuntimeError(
