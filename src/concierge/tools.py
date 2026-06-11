@@ -44,11 +44,23 @@ def search_banking_docs(query: str, k: int = 4) -> str:
 
 @tool
 def account_lookup(customer_id: str) -> dict:
-    """Look up account information.
+    """Look up account information for a customer.
 
     Returns the customer's name and a list of their account IDs, account
     types, and balances. Use this when the user wants details about an
     account.
+
+    Args:
+        customer_id: MUST be a string in the exact format ``CUST-####``
+            (four digits, e.g. ``CUST-0001``). This tool ONLY accepts
+            already-resolved customer IDs. Do NOT pass:
+              - SSNs (e.g. ``553-22-8810`` or ``553228810``)
+              - phone numbers (e.g. ``4155550142`` or ``(415) 555-0142``)
+              - card numbers (e.g. ``4242 4242 4242 4242``)
+              - bare account numbers (e.g. ``0001``)
+              - ``CUST-`` concatenated with any of the above
+            If the user only gave one of those identifiers, ask them for
+            their ``CUST-####`` customer ID instead of guessing.
     """
     if customer_id.startswith("X"):
         raise RuntimeError(
