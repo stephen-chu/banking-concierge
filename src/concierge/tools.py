@@ -44,12 +44,7 @@ def search_banking_docs(query: str, k: int = 4) -> str:
 
 @tool
 def account_lookup(customer_id: str) -> dict:
-    """Look up account information.
-
-    Returns the customer's name and a list of their account IDs, account
-    types, and balances. Use this when the user wants details about an
-    account.
-    """
+    """Look up account information; returns masked identifiers — use verify_account_field to confirm caller-stated values."""
     if customer_id.startswith("X"):
         raise RuntimeError(
             "Customer record service is temporarily unavailable. Try again later."
@@ -60,7 +55,58 @@ def account_lookup(customer_id: str) -> dict:
             f"No customer found with ID {customer_id!r}. "
             "Customer IDs are in the format CUST-####."
         )
-    return dict(customer)
+    return _redact_customer(customer)
+
+
+def _redact_customer(customer: dict) -> dict:
+    ssn = customer.get("ssn", "")
+    masked_ssn = f"***-**-{ssn[-4:]}" if len(ssn) >= 4 else "***-**-****"
+    cards = []
+    for c in customer.get("credit_cards", []):
+        num = (c.get("number") or "").replace(" ", "")
+        last4 = num[-4:] if len(num) >= 4 else "****"
+        cards.append({"brand": c.get("brand"), "last4": last4, "exp": c.get("exp")})
+    return {
+        "customer_id": customer["customer_id"],
+        "name": customer["name"],
+        "ssn_last4": masked_ssn,
+        "phone_last4": (customer.get("phone") or "")[-4:],
+        "email_masked": _mask_email(customer.get("email", "")),
+        "credit_cards": cards,
+        "accounts": [dict(a) for a in customer.get("accounts", [])],
+    }
+
+
+def _mask_email(email: str) -> str:
+    if "@" not in email:
+        return "***"
+    local, _, domain = email.partition("@")
+    return f"{local[:1]}***@{domain}"
+
+
+@tool
+def verify_account_field(customer_id: str, field: str, value: str) -> dict:
+    """Verify a caller-provided value against the stored record; returns only {'match': bool}."""
+    customer = CUSTOMERS.get(customer_id)
+    if customer is None:
+        raise ValueError(f"No customer found with ID {customer_id!r}.")
+    if field == "ssn":
+        stored = customer.get("ssn", "")
+        return {"match": stored == value}
+    if field == "phone":
+        stored = "".join(ch for ch in customer.get("phone", "") if ch.isdigit())
+        normalized = "".join(ch for ch in value if ch.isdigit())
+        return {"match": stored == normalized}
+    if field == "email":
+        stored = (customer.get("email") or "").lower()
+        return {"match": stored == value.lower()}
+    if field == "card_last4":
+        last4s = [
+            (c.get("number") or "").replace(" ", "")[-4:]
+            for c in customer.get("credit_cards", [])
+        ]
+        return {"match": value in last4s}
+    raise ValueError(f"Unsupported verification field {field!r}.")
 
 
 @tool
@@ -132,6 +178,7 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> dict:
 TOOLS = [
     search_banking_docs,
     account_lookup,
+    verify_account_field,
     recent_transactions,
     find_branch,
     transfer_funds,
