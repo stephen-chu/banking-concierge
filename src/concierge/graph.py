@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 
 from dotenv import load_dotenv
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -57,6 +57,16 @@ def agent_node(state: ConciergeState) -> dict:
     new_retrievals = sum(
         1 for call in tool_calls if call.get("name") == "search_banking_docs"
     )
+
+    if retrieval_calls + new_retrievals > 6:
+        response = AIMessage(
+            content=(
+                "I've already searched the docs several times this turn. "
+                "Let me answer from what those searches returned rather than "
+                "running more queries."
+            )
+        )
+        new_retrievals = 0
 
     return {
         "messages": [response],
