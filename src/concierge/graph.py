@@ -13,6 +13,7 @@ import os
 
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
+from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -29,7 +30,7 @@ load_dotenv(override=True)
 SYSTEM_PROMPT = get_prompt()
 
 
-def _make_model() -> ChatOpenAI:
+def _make_model() -> Runnable:
     model_name = os.getenv("CONCIERGE_MODEL", "gpt-4o-mini")
     base_url = os.getenv("BASE_URL")
     if base_url:
@@ -43,7 +44,14 @@ def _make_model() -> ChatOpenAI:
         )
     else:
         client = ChatOpenAI(model=model_name, temperature=0.2)
-    return client.bind_tools(TOOLS)
+    bound = client.bind_tools(TOOLS)
+    return bound.with_config(
+        metadata={
+            "ls_provider": "openai",
+            "ls_model_name": model_name,
+            "ls_message_format": "openai",
+        }
+    )
 
 
 def agent_node(state: ConciergeState) -> dict:
