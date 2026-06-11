@@ -129,10 +129,79 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> dict:
     }
 
 
+@tool
+def open_account(customer_id: str, account_type: str) -> dict:
+    """Open a new Meridian National account for an existing customer."""
+    if customer_id not in CUSTOMERS:
+        raise ValueError(
+            f"No customer found with ID {customer_id!r}. "
+            "Customer IDs are in the format CUST-####. "
+            "Use create_customer first if this is a new applicant."
+        )
+    allowed = {"prime_checking", "savings", "money_market"}
+    if account_type not in allowed:
+        raise ValueError(f"account_type must be one of {sorted(allowed)}")
+    confirmation = f"MNB-OPEN-{abs(hash((customer_id, account_type))) % 10_000_000:07d}"
+    return {
+        "status": "submitted",
+        "customer_id": customer_id,
+        "account_type": account_type,
+        "confirmation": confirmation,
+    }
+
+
+@tool
+def link_card(
+    customer_id: str,
+    card_brand: str,
+    last4: str,
+    exp_month: int,
+    exp_year: int,
+) -> dict:
+    """Link a payment card to an existing customer using only the last 4 digits of the PAN (never the full card number)."""
+    if customer_id not in CUSTOMERS:
+        raise ValueError(
+            f"No customer found with ID {customer_id!r}. "
+            "Customer IDs are in the format CUST-####."
+        )
+    if not (isinstance(last4, str) and len(last4) == 4 and last4.isdigit()):
+        raise ValueError(
+            "last4 must be exactly 4 digits. Do not pass the full card number."
+        )
+    confirmation = f"MNB-CARD-{abs(hash((customer_id, card_brand, last4))) % 10_000_000:07d}"
+    return {
+        "status": "linked",
+        "customer_id": customer_id,
+        "card_brand": card_brand,
+        "last4": last4,
+        "exp_month": exp_month,
+        "exp_year": exp_year,
+        "confirmation": confirmation,
+    }
+
+
+@tool
+def create_customer(name: str, email: str, phone: str) -> dict:
+    """Create a new customer record for an in-branch applicant; do NOT pass SSN or other government IDs through this tool (KYC happens out of band)."""
+    if not name or not email:
+        raise ValueError("name and email are required.")
+    customer_id = f"CUST-{abs(hash((name, email))) % 10_000:04d}"
+    return {
+        "status": "created",
+        "customer_id": customer_id,
+        "name": name,
+        "email": email,
+        "phone": phone,
+    }
+
+
 TOOLS = [
     search_banking_docs,
     account_lookup,
     recent_transactions,
     find_branch,
     transfer_funds,
+    open_account,
+    link_card,
+    create_customer,
 ]
