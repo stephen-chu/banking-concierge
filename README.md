@@ -65,7 +65,7 @@ Required environment variables (see `.env.example`):
 
 | Var | Purpose |
 |---|---|
-| `OPENAI_API_KEY` | Agent + judge model calls |
+| `OPENAI_API_KEY` | Required. Agent + judge model calls, and the `search_banking_docs` embeddings client (which hits OpenAI's `/embeddings` directly — the LangSmith LLM Gateway does not allow-list `/embeddings`, so this key is required even when `BASE_URL` is set) |
 | `LANGSMITH_API_KEY` | Tracing, datasets, experiments, deployment |
 | `LANGSMITH_TRACING` | `"true"` to send traces |
 | `LANGSMITH_PROJECT` | Tracing project for ad-hoc and loadgen runs |

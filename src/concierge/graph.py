@@ -23,6 +23,25 @@ from concierge.tools import TOOLS
 
 load_dotenv(override=True)
 
+
+def _require_chat_credentials() -> None:
+    """Fail fast at import if no usable chat credential is configured."""
+    if os.getenv("BASE_URL"):
+        if not os.getenv("LANGSMITH_API_KEY"):
+            raise RuntimeError(
+                "BASE_URL is set (LangSmith LLM Gateway) but LANGSMITH_API_KEY is missing. "
+                "Set LANGSMITH_API_KEY in the deployment secrets."
+            )
+    elif not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError(
+            "No chat credential configured. Either set OPENAI_API_KEY in the deployment "
+            "secrets, or set BASE_URL to route through the LangSmith LLM Gateway with "
+            "LANGSMITH_API_KEY."
+        )
+
+
+_require_chat_credentials()
+
 # The system prompt (AGENTS.md) is pulled from LangSmith Context Hub at module
 # import; a hub edit is picked up on the next process start. Falls back to the
 # seed in concierge.prompts.SYSTEM_PROMPT when the hub is unreachable.
@@ -42,7 +61,11 @@ def _make_model() -> ChatOpenAI:
             api_key=os.environ["LANGSMITH_API_KEY"],
         )
     else:
-        client = ChatOpenAI(model=model_name, temperature=0.2)
+        client = ChatOpenAI(
+            model=model_name,
+            temperature=0.2,
+            api_key=os.environ["OPENAI_API_KEY"],
+        )
     return client.bind_tools(TOOLS)
 
 

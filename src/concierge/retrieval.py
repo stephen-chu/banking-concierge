@@ -14,6 +14,19 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 KB_DIR = Path(__file__).parent / "kb"
 
 
+def _require_embeddings_credentials() -> None:
+    """Fail fast at import if OPENAI_API_KEY is missing for the embeddings client."""
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError(
+            "search_banking_docs requires OPENAI_API_KEY for the embeddings client. "
+            "The LangSmith LLM Gateway does not allow-list /embeddings, so this key "
+            "is required even when BASE_URL is set for chat completions."
+        )
+
+
+_require_embeddings_credentials()
+
+
 def _make_embeddings() -> OpenAIEmbeddings:
     # Embeddings must go directly to OpenAI. The LangSmith gateway only
     # allow-lists chat completions, not /embeddings, so when BASE_URL /
