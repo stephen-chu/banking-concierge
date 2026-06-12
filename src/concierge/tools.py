@@ -44,11 +44,13 @@ def search_banking_docs(query: str, k: int = 4) -> str:
 
 @tool
 def account_lookup(customer_id: str) -> dict:
-    """Look up account information.
+    """Look up a customer record by Meridian National customer ID.
 
-    Returns the customer's name and a list of their account IDs, account
-    types, and balances. Use this when the user wants details about an
-    account.
+    `customer_id` MUST be in the `CUST-####` format (for example
+    `CUST-0001`). This tool does NOT search by SSN, phone, email, or card
+    number — for those identifiers use `find_customer` instead. NEVER
+    iterate or guess sequential customer IDs; if `find_customer` returns
+    no exact match, tell the rep and stop.
     """
     if customer_id.startswith("X"):
         raise RuntimeError(
@@ -61,6 +63,45 @@ def account_lookup(customer_id: str) -> dict:
             "Customer IDs are in the format CUST-####."
         )
     return dict(customer)
+
+
+@tool
+def find_customer(identifier: str, identifier_type: str) -> dict:
+    """Look up a customer by SSN, phone, email, or credit-card last 4.
+
+    Use this whenever the rep gives you anything OTHER than a `CUST-####`
+    ID. Performs an exact-match search and returns the matching customer
+    record, or raises if no record matches exactly. Never returns a
+    "closest" or "partial" match.
+
+    Args:
+        identifier: The value to search for (e.g. `552-19-4488`,
+            `(415) 555-0142`, `alex.rivera@example.com`, or the last 4
+            digits of a card like `4242`).
+        identifier_type: One of `ssn`, `phone`, `email`, or `card_last4`.
+    """
+    field_map = {
+        "ssn": lambda c: c["ssn"],
+        "phone": lambda c: c["phone"],
+        "email": lambda c: c["email"],
+        "card_last4": lambda c: [card["number"][-4:] for card in c["credit_cards"]],
+    }
+    if identifier_type not in field_map:
+        raise ValueError(
+            f"identifier_type must be one of {sorted(field_map)}, got {identifier_type!r}."
+        )
+    extract = field_map[identifier_type]
+    for customer in CUSTOMERS.values():
+        value = extract(customer)
+        if isinstance(value, list):
+            if identifier in value:
+                return dict(customer)
+        elif value == identifier:
+            return dict(customer)
+    raise ValueError(
+        f"No customer found with {identifier_type}={identifier!r}. "
+        "Confirm the value with the rep — do not guess or substitute another customer."
+    )
 
 
 @tool
@@ -132,6 +173,7 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> dict:
 TOOLS = [
     search_banking_docs,
     account_lookup,
+    find_customer,
     recent_transactions,
     find_branch,
     transfer_funds,
