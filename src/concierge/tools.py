@@ -63,6 +63,46 @@ def account_lookup(customer_id: str) -> dict:
     return dict(customer)
 
 
+_VERIFY_FIELDS = {"ssn", "phone", "email", "card", "card_number", "address", "dob", "date_of_birth"}
+
+
+def _normalize_digits(value: str) -> str:
+    return "".join(ch for ch in value if ch.isdigit())
+
+
+@tool
+def verify_account_field(customer_id: str, field: str, value: str) -> dict:
+    """Return {"match": bool} for whether the provided value matches the on-file field; never returns the on-file value."""
+    customer = CUSTOMERS.get(customer_id)
+    if customer is None:
+        raise ValueError(
+            f"No customer found with ID {customer_id!r}. "
+            "Customer IDs are in the format CUST-####."
+        )
+    key = field.strip().lower().replace("-", "_").replace(" ", "_")
+    if key not in _VERIFY_FIELDS:
+        raise ValueError(
+            f"Unsupported field {field!r}. Supported: ssn, phone, email, card, address, date_of_birth."
+        )
+    provided = (value or "").strip()
+    match = False
+    if key == "ssn":
+        match = _normalize_digits(provided) == _normalize_digits(customer.get("ssn", ""))
+    elif key == "phone":
+        match = _normalize_digits(provided) == _normalize_digits(customer.get("phone", ""))
+    elif key == "email":
+        match = provided.lower() == customer.get("email", "").lower()
+    elif key in {"card", "card_number"}:
+        provided_digits = _normalize_digits(provided)
+        match = any(
+            provided_digits == _normalize_digits(card.get("number", ""))
+            for card in customer.get("credit_cards", [])
+        )
+    else:
+        match = False
+    return {"match": bool(match)}
+
+
 @tool
 def recent_transactions(customer_id: str, limit: int = 5) -> list[dict]:
     """Retrieve a customer's most recent transactions.
@@ -132,6 +172,7 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> dict:
 TOOLS = [
     search_banking_docs,
     account_lookup,
+    verify_account_field,
     recent_transactions,
     find_branch,
     transfer_funds,
