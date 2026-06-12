@@ -28,9 +28,19 @@ from concierge.retrieval import retrieve
 def search_banking_docs(query: str, k: int = 4) -> str:
     """Search Meridian National banking documentation.
 
+    If the response is exactly "No relevant documentation found.", do NOT
+    call this tool again with the same query string. On the next attempt,
+    reformulate: try synonyms, broader or narrower terms, a different facet
+    of the question, or raise `k` (e.g. to 8). After two distinct
+    unsuccessful queries on the same topic, stop searching and tell the
+    representative the documentation doesn't cover that topic — do not fall
+    back to answering from training memory.
+
     Args:
-        query: A natural-language search query.
-        k: Number of relevant chunks to return. Defaults to 4.
+        query: A natural-language search query. Must differ from any prior
+            query in this conversation that returned no results.
+        k: Number of relevant chunks to return. Defaults to 4; consider
+            raising to 8 on a broadening retry.
     """
     chunks = retrieve(query, k=k)
     if not chunks:
