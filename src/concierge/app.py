@@ -22,16 +22,81 @@ server can build the OpenAPI spec at startup; lazy string annotations raise
 PydanticUserError("...is not fully defined").
 """
 
+import hashlib
+import json
+import os
 import pathlib
+import re
 import uuid
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from langsmith import Client
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
 app = FastAPI()
+
+
+_RUN_CREATE_PATH = re.compile(
+    r"^/(?:threads/[^/]+/runs|runs)(?:/(?:stream|wait|batch))?/?$"
+)
+
+
+def _rep_identifier(request: Request) -> str | None:
+    """Derive a stable, non-secret id for the authenticated rep from the request."""
+    api_key = request.headers.get("x-api-key") or request.headers.get("X-Api-Key")
+    if not api_key:
+        return None
+    digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+    return f"rep-{digest}"
+
+
+class RunMetadataMiddleware(BaseHTTPMiddleware):
+    """Inject `user_id` and `environment` into LangGraph run-creation metadata.
+
+    LangSmith needs a non-empty `user_id` on root runs to power per-rep
+    filtering on this multi-tenant app. We attach it at the HTTP boundary so
+    every run created through the agent server picks it up regardless of which
+    client initiated it.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "POST" and _RUN_CREATE_PATH.match(request.url.path):
+            user_id = _rep_identifier(request)
+            if user_id:
+                body = await request.body()
+                if body:
+                    try:
+                        payload = json.loads(body)
+                    except json.JSONDecodeError:
+                        payload = None
+                    if isinstance(payload, dict):
+                        config = payload.setdefault("config", {})
+                        if isinstance(config, dict):
+                            metadata = config.setdefault("metadata", {})
+                            if isinstance(metadata, dict):
+                                metadata.setdefault("user_id", user_id)
+                                metadata.setdefault(
+                                    "environment",
+                                    os.getenv("CONCIERGE_ENV", "production"),
+                                )
+                                new_body = json.dumps(payload).encode("utf-8")
+                                request._body = new_body  # noqa: SLF001
+
+                                async def receive() -> dict:
+                                    return {
+                                        "type": "http.request",
+                                        "body": new_body,
+                                        "more_body": False,
+                                    }
+
+                                request._receive = receive  # noqa: SLF001
+        return await call_next(request)
+
+
+app.add_middleware(RunMetadataMiddleware)
 
 _langsmith_client = Client()
 
